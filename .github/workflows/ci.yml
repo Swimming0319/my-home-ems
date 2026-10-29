@@ -1,0 +1,35 @@
+# 每次 push 到 main、或開 PR 時，自動跑型別檢查與單元測試。
+# 部署由 Vercel 的 GitHub 整合負責，這裡只做檢查；測試不需要 Supabase（純函式＋記憶體 repo）。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一個分支連續 push 時，取消還在跑的舊檢查
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      # 跟 Vercel 預設的 Node 版本一致
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall 會跑 nuxt prepare，產生型別檢查需要的 .nuxt
+      - run: npm ci
+
+      - name: 型別檢查
+        run: npm run typecheck
+
+      - name: 單元測試
+        run: npm test

@@ -8,7 +8,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "nuxi typecheck"
   },
   "dependencies": {
     "@pinia/nuxt": "^1.0.3",
@@ -25,6 +26,8 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/three": "^0.186.0",
-    "vitest": "^5.0.5"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5",
+    "vue-tsc": "^3.3.13"
   }
 }

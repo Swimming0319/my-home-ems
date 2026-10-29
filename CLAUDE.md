@@ -10,7 +10,7 @@ npm test           # Vitest，涵蓋 server/utils/ 底下的用電模型、指�
 npm run build
 ```
 
-`package.json` 沒有裝 vue-tsc，要做完整型別檢查時用 `npm i --no-save vue-tsc typescript@~5.9 && npx nuxi typecheck`。
+型別檢查：`npm run typecheck`（vue-tsc）。push 到 `main` 或開 PR 時，GitHub Actions（`.github/workflows/ci.yml`）會自動跑型別檢查與測試，README 上有徽章；部署則由 Vercel 的 GitHub 整合負責，兩者互不影響。
 
 ## 回應語言與術語
 

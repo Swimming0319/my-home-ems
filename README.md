@@ -1,5 +1,7 @@
 # 用電小屋
 
+[![CI](https://github.com/Swimming0319/my-home-ems/actions/workflows/ci.yml/badge.svg)](https://github.com/Swimming0319/my-home-ems/actions/workflows/ci.yml)
+
 一間全站共用的 3D 小套房：操控 Q 版角色開關家電，用電量、警示、跳電會即時同步到監控後台。
 
 **線上展示：https://my-home-ems.vercel.app**（後台：[/admin](https://my-home-ems.vercel.app/admin)，不登入是唯讀的訪客模式）
@@ -60,6 +62,7 @@ flowchart LR
 npm install
 npm run dev        # http://localhost:3010
 npm test           # Vitest：用電模型、指令驗證、警示規則、資料存取
+npm run typecheck  # 型別檢查（vue-tsc）；push 到 main 時 GitHub Actions 會自動跑這兩項
 ```
 
 **不設定 Supabase 也能直接跑**：後端偵測到 `NUXT_PUBLIC_SUPABASE_URL`／`NUXT_SUPABASE_SERVICE_KEY` 沒填時會改用記憶體模式，狀態與歷史在伺服器重啟後清空。
