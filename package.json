@@ -1,0 +1,30 @@
+{
+  "name": "smart-room",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^1.0.3",
+    "@supabase/supabase-js": "^2.118.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "chart.js": "^4.6.1",
+    "nuxt": "^4.6.3",
+    "pinia": "^4.1.0",
+    "tailwindcss": "^4.3.3",
+    "three": "^0.186.1",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/three": "^0.186.0",
+    "vitest": "^5.0.5"
+  }
+}
