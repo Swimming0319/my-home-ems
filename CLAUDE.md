@@ -27,6 +27,7 @@ npm run build
 - 房間 8 × 6（x -3 ~ 5、z -3 ~ 3），右邊 x 3 ~ 5 是廚房。微波爐、熱水壺的 builder 各自帶一段流理台（`buildCounter`），並排成一整條檯面
 - 日夜循環（`app/utils/dayCycle.ts`）：跟著瀏覽器本地時間，晚上環境光剩 `NIGHT_LIGHT`，每開一盞燈補 `LAMP_FILL` 的暖色環境光（壁燈的點光源只照得到附近的牆，不補的話開燈房間還是很暗；白天開燈不補），廚房上方的窗戶畫天色／太陽／月亮。頁面用 `useDayHour()` 取得小時傳給 `RoomScene` 的 `hour`；網址加 `?hour=21.5` 可以固定時間預覽
 - 電費試算（`shared/utils/energy.ts`）：台電住宅累進電價（2025/10 調整後、2026 沿用，級距以每月計），用過去 24 小時讀數積分成度數再 ×30 推估月電費。每日任務（`shared/utils/missions.ts`）：不要跳電、用電不超過 10 度、冷氣 26°C 以上，全房間共同、每天 0 點重來。兩者都在前端從 24 小時歷史算，跳電時間點另外由 `GET /api/breaker/trips` 提供。電價調整時改 `TARIFF_TIERS` 並同步規劃文件
+- 頁籤 icon 與分享預覽卡片：`public/favicon.svg`（小屋＋閃電）、`favicon-32.png`、`apple-touch-icon.png`；預覽卡片的 meta 在 `nuxt.config.ts`（`SITE_URL` 換網域要一起改），圖片 `public/og-image.jpg`（1200×630）是前台 `?hour=13`、開著冷氣／電視／燈、藏掉資訊框後的截圖，左邊疊上標題與簡介。房間外觀大改時記得重做這張圖
 - 進頁面的 loading（`LoadingScreen.vue`，前台與後台都有）：電箱造型，等「資料第一次載入（`store.loaded`）」、「3D 場景畫出第一格」、「家具載完」三件事都完成才扳上總開關、淡出。後兩者由 `RoomScene` 的 `loaded` 事件回報；WebGL 失敗、家具載入失敗也會回報，loading 才不會卡住
 - 新手導覽（`useGuideTour`、`WelcomeDialog.vue`、`GuideCard.vue`，只在前台）：第一次進來（`localStorage` 沒有記錄）loading 結束後跳歡迎視窗；導覽步驟看「真的做到了」自動打勾（走近家電、指令送出成功、看到停電、停電後看到復電），不強制順序，因為共用房間進來時可能已經停電。導覽進行中，今日任務的位置換成導覽步驟。「帶我去電箱」呼叫 `RoomScene` 的 `walkToBreaker()`，走到電箱會自動扳總開關。改了跳電條件（契約容量、`BREAKER_GRACE_MS`、家電耗電）要確認第 3 步「冷氣＋微波爐＋熱水壺」還會跳電。導覽第 3 步完成前的指令帶 `guided: true`，存在 `device_events.guided`；跳電時 `tripIsGuided`（`shared/utils/breaker.ts`）看跳電當下開著的家電有沒有導覽中開的，有就把斷電事件也標 `guided`，每日任務不把這次跳電算失敗。新增會寫 `device_events` 的地方要記得填 `guided`
 - 3D 標籤會互相避讓（`placeLabels`）：選取中、接近／超過閾值的優先放原位，其他撞到就往上疊
