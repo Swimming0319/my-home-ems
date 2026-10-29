@@ -1,10 +1,60 @@
 # 用電小屋
 
-全站共用一間 3D 小屋：前台操控角色使用家電，後台即時監控用電、接近上限時警示，也能遠端控制。規劃與建置進度見 [smart-room-spec.md](smart-room-spec.md)。
+一間全站共用的 3D 小套房：操控 Q 版角色開關家電，用電量、警示、跳電會即時同步到監控後台。
 
-Nuxt 4 + TypeScript + Pinia + Tailwind CSS v4 + Three.js + Chart.js，資料庫 Supabase（Postgres），部署 Vercel。
+**線上展示：https://my-home-ems.vercel.app**（後台：[/admin](https://my-home-ems.vercel.app/admin)，不登入是唯讀的訪客模式）
 
-## 快速開始
+![前台開冷氣、微波爐、熱水壺，後台即時看到用電上升、超載倒數，最後跳電](docs/demo.gif)
+
+> 開兩個視窗，一邊前台、一邊後台，就能看到即時同步。第一次進前台會有一分鐘的新手導覽：開家電 → 超過契約容量跳電 → 到電箱復電。
+
+Nuxt 4 · TypeScript · Three.js · Pinia · Tailwind CSS v4 · Chart.js · Supabase（Postgres + Realtime）· Vercel
+
+## 技術亮點
+
+- **用電讀數不存資料庫**：只在狀態改變時寫一筆事件，讀數由純函式依「當時的狀態＋經過時間」推算（冷氣開機高峰、洗衣行程、冰箱壓縮機循環），前後端共用同一份模型 [`shared/utils/powerModel.ts`](shared/utils/powerModel.ts)。雜訊用電器 id 與時間槽當種子，同一個時間點查幾次都一樣，圖表輪詢時不會亂跳。
+- **跳電「延遲結算」**：伺服器沒有背景程序盯著用電，而是在送指令、讀取狀態時，算出從上次結算到現在第一個該跳電的精確時間點，把斷電事件補寫在那個時間點上。沒人在線時超載，下次有人打開頁面，歷史一樣正確（[`server/utils/breaker.ts`](server/utils/breaker.ts)）。
+- **後端是唯一的真實來源**：前台、後台都只送指令，由後端驗證後寫入事件，再由 Supabase Realtime 推播給所有人；Realtime 斷線時自動退回 10 秒輪詢，重新連上時補抓一次。
+- **權限分層**：玩家操作家電公開；遠端控制、遠端復電、修改閾值與契約容量需要管理密碼（加密的 httpOnly session cookie）。沒登入的後台是唯讀訪客模式，寫入的 API 在伺服器端另外擋，指令與登入都有限流。
+- **3D 互動全部自製**：Q 版角色用基本幾何體組成，走路、蹲下、拿遙控器、坐躺都是程式產生的動畫並依權重混合；點擊移動用網格 A* 繞過家具；斜放家具的碰撞用旋轉後的方塊計算。電視節目、洗衣機的水流、窗外天色都是即時畫的。
+- **貼近真實的規則**：台電住宅累進電價試算月電費、全屋契約容量 3,000 W 超載 10 秒跳電、跟著瀏覽器時間的日夜循環、每日省電任務。每個數字的來由（哪些是為了展示刻意放大）記在[規劃文件](smart-room-spec.md)。
+- **測試**：Vitest 單元測試涵蓋用電模型、跳電結算與復電、指令驗證、警示規則、電費、每日任務、碰撞與尋路。
+
+## 架構
+
+```mermaid
+flowchart LR
+  subgraph browser["瀏覽器"]
+    player["前台 /<br/>Three.js 角色操作"]
+    admin["後台 /admin<br/>圖表・警示・遠端控制"]
+    store["Pinia store<br/>每秒推算即時讀數"]
+  end
+  subgraph vercel["Vercel（Nuxt server routes，東京）"]
+    commands["POST /api/devices/:id/commands<br/>驗證指令"]
+    breaker["advanceBreaker<br/>延遲結算跳電"]
+    readings["GET /api/devices/:id/readings<br/>由事件推算歷史讀數"]
+  end
+  subgraph supabase["Supabase（東京）"]
+    db[("device_events<br/>house_settings")]
+    realtime["Realtime"]
+  end
+  player -- 操作家電 --> commands
+  admin -- 遠端控制（需登入） --> commands
+  commands --> breaker --> db
+  readings --> db
+  store -- 載入 24 小時歷史 --> readings
+  db --> realtime -- 推播新事件 --> store
+  store --> player
+  store --> admin
+```
+
+家電的耗電只取決於當下狀態與經過多久，所以只在狀態改變時記一筆 `device_events`，圖表要的讀數在查詢時才算出來。洗衣行程切換、冰箱壓縮機這類「時間到了自己變化」的狀態不會產生事件，前端用同一份模型自己推算。警示紀錄也是由歷史讀數推算，不另外存表。產品規劃、用電模型、警示規則與決策紀錄見 [smart-room-spec.md](smart-room-spec.md)。
+
+---
+
+以下是開發文件。
+
+## 本機開發
 
 ```sh
 npm install
@@ -32,18 +82,6 @@ npm test           # Vitest：用電模型、指令驗證、警示規則、資�
    - `NUXT_PUBLIC_SUPABASE_KEY`：publishable key，給瀏覽器訂閱 Realtime；沒填的話前端退回每 10 秒輪詢
    - `NUXT_ADMIN_PASSWORD`：後台管理密碼。`npm run dev` 時沒填就不需要登入（直接有管理權限）；正式環境沒填的話沒有人能登入，後台只剩訪客模式
 3. 重開 `npm run dev`，終端機不再出現「改用記憶體模式」的警告、頁面顯示「即時同步中」就代表都接上了
-
-## 資料怎麼流動
-
-```
-POST /api/devices/:id/commands ──▶ 驗證指令 ──▶ 寫入 device_events（狀態有改變才寫）
-                                                   │
-                                                   ▼ Supabase Realtime 推播新事件
-前台／後台：收到事件 → 更新「目前生效的事件」→ 每秒用 readingFromEvent 推算即時讀數
-GET  /api/devices/:id/readings ──▶ 讀出事件 ──▶ 由「狀態 + 經過時間」推算 24 小時歷史讀數
-```
-
-用電讀數不存資料庫：家電耗電只取決於當下狀態與經過多久（冷氣開機高峰、洗衣行程），所以只在狀態改變時記一筆事件，查詢時才把讀數算出來。用電模型放在 `shared/utils/powerModel.ts`，前後端共用——洗衣行程切換這類「時間到了自己變化」的狀態不會產生事件，前端要自己推算。警示紀錄也是由歷史讀數推算，不另外存表。詳細的用電模型與警示規則見規劃文件。
 
 ## API
 
