@@ -17,7 +17,7 @@ export function useAdminSession() {
 
   async function logout() {
     await $fetch('/api/admin/logout', { method: 'POST' })
-    session.value = { authenticated: false, passwordRequired: session.value?.passwordRequired ?? true }
+    if (session.value) session.value = { ...session.value, authenticated: false, email: null }
   }
 
   return { session, refresh, login, logout }

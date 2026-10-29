@@ -78,15 +78,13 @@ function onDialogClick(e: MouseEvent) {
             <span class="rounded-full bg-highlight/15 px-2 font-semibold text-highlight">訪客模式（唯讀）</span>
             <NuxtLink to="/admin/login" class="underline-offset-2 hover:text-ink hover:underline">管理員登入</NuxtLink>
           </template>
-          <button
-            v-else-if="session?.passwordRequired"
-            type="button"
-            class="cursor-pointer underline-offset-2 hover:text-ink hover:underline"
-            @click="signOut"
-          >
-            登出
-          </button>
-          <span v-else class="text-warning">開發模式：未設定管理密碼，不需登入</span>
+          <template v-else-if="session?.loginRequired">
+            <span v-if="session.email">管理員：{{ session.email }}</span>
+            <button type="button" class="cursor-pointer underline-offset-2 hover:text-ink hover:underline" @click="signOut">
+              登出
+            </button>
+          </template>
+          <span v-else class="text-warning">開發模式：未設定登入方式，不需登入</span>
         </p>
         <h1 class="text-[22px] font-bold">用電小屋 · 監控後台</h1>
       </div>

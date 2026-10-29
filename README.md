@@ -83,7 +83,9 @@ npm run typecheck  # 型別檢查（vue-tsc）；push 到 main 時 GitHub Action
    - `NUXT_PUBLIC_SUPABASE_URL`：Project URL，`https://xxxx.supabase.co`，**不要**填結尾多了 `/rest/v1/` 的 REST endpoint
    - `NUXT_SUPABASE_SERVICE_KEY`：secret key，只在伺服器端使用
    - `NUXT_PUBLIC_SUPABASE_KEY`：publishable key，給瀏覽器訂閱 Realtime；沒填的話前端退回每 10 秒輪詢
-   - `NUXT_ADMIN_PASSWORD`：後台管理密碼。`npm run dev` 時沒填就不需要登入（直接有管理權限）；正式環境沒填的話沒有人能登入，後台只剩訪客模式
+   - `NUXT_ADMIN_PASSWORD`：後台管理密碼（可選）。沒有 Supabase 的記憶體模式只能用密碼登入
+   - `NUXT_ADMIN_EMAILS`：可以用 Google 登入後台的信箱，逗號分隔（可選，見下方「後台的 Google 登入」）
+   - 兩者都沒填時：`npm run dev` 不需要登入（直接有管理權限）；正式環境沒有人能登入，後台只剩訪客模式
 3. 重開 `npm run dev`，終端機不再出現「改用記憶體模式」的警告、頁面顯示「即時同步中」就代表都接上了
 
 ## API
@@ -99,7 +101,8 @@ npm run typecheck  # 型別檢查（vue-tsc）；push 到 main 時 GitHub Action
 | POST | `/api/breaker/check` | 結算跳電，回傳 `{ tripped_at }`；公開、可重複呼叫 |
 | GET | `/api/breaker/trips` | 過去 24 小時的每次跳電（`{ at, guided }` 陣列；`guided` 是新手導覽示範造成的，不算進每日任務） |
 | POST | `/api/breaker/reset` | 復電 `{ source: 'player' \| 'admin' }`，回傳 `{ restored }`；admin 需要登入 |
-| GET／POST | `/api/admin/session`、`/api/admin/login`、`/api/admin/logout` | 後台登入狀態（每個 IP 每分鐘最多試 5 次密碼） |
+| GET／POST | `/api/admin/session`、`/api/admin/login`、`/api/admin/logout` | 後台登入狀態、密碼登入、登出（每個 IP 每分鐘最多試 5 次） |
+| POST | `/api/admin/google` | Google 登入後換 session `{ access_token }`：伺服器向 Supabase 驗證 token，信箱在 `NUXT_ADMIN_EMAILS` 裡才發 cookie |
 
 指令格式：
 
@@ -125,6 +128,17 @@ npm run typecheck  # 型別檢查（vue-tsc）；push 到 main 時 GitHub Action
 
 ## 部署到 Vercel
 
-- 環境變數：`NUXT_PUBLIC_SUPABASE_URL`、`NUXT_SUPABASE_SERVICE_KEY`、`NUXT_PUBLIC_SUPABASE_KEY`、`NUXT_ADMIN_PASSWORD`
+- 環境變數：`NUXT_PUBLIC_SUPABASE_URL`、`NUXT_SUPABASE_SERVICE_KEY`、`NUXT_PUBLIC_SUPABASE_KEY`、`NUXT_ADMIN_EMAILS` 和／或 `NUXT_ADMIN_PASSWORD`
 - Supabase 專案建在東京的話，Vercel functions 的區域也要設在東京附近，不然每次查詢都要繞一趟美國
-- **一定要設定 `NUXT_ADMIN_PASSWORD`**，而且用夠長的隨機密碼：登入 cookie 的加密金鑰是從這組密碼衍生的
+- **管理密碼要用夠長的隨機密碼**：有設定時，登入 cookie 的加密金鑰是從這組密碼衍生的（只開 Google 登入時改由 Supabase 的 secret key 衍生）
+
+## 後台的 Google 登入
+
+管理員登入可以用 Google 帳號，不用記密碼。只有後台的「管理員登入」會用到，前台與後台訪客模式都不需要登入。
+
+1. Google Cloud Console 建立 OAuth 用戶端（網頁應用程式），「已授權的重新導向 URI」填 Supabase 給的 Callback URL（`https://xxxx.supabase.co/auth/v1/callback`）
+2. Supabase → Authentication → Sign In / Providers → Google：開啟，貼上用戶端 ID 與密鑰
+3. Supabase → Authentication → URL Configuration：Site URL 填正式網址，Redirect URLs 加上 `https://正式網域/admin/login`（本機測試再加 `http://localhost:3010/admin/login`）
+4. 環境變數 `NUXT_ADMIN_EMAILS` 填允許的信箱
+
+流程：瀏覽器透過 Supabase Auth（PKCE）跳去 Google → 回到 `/admin/login?code=…` 換成 access token → `POST /api/admin/google` 由伺服器向 Supabase 驗證、檢查「用 Google 登入＋信箱已驗證＋在允許名單裡」→ 發跟密碼登入一樣的加密 session cookie，瀏覽器隨即登出 Supabase。權限檢查（`requireAdmin`）不管用哪種方式登入都一樣

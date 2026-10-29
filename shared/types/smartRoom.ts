@@ -79,8 +79,13 @@ export interface HouseSettings {
 
 export interface AdminSession {
   authenticated: boolean
-  // 伺服器有沒有設定管理密碼；開發模式沒設定時不需要登入
-  passwordRequired: boolean
+  // 後台需不需要登入：開發模式什麼登入方式都沒設定時不需要
+  loginRequired: boolean
+  // 伺服器開放的登入方式：管理密碼（NUXT_ADMIN_PASSWORD）、Google（NUXT_ADMIN_EMAILS 允許名單）
+  passwordLogin: boolean
+  googleLogin: boolean
+  // 用 Google 登入的信箱；用密碼登入或沒登入時是 null
+  email: string | null
 }
 
 export interface BreakerCheckResult {

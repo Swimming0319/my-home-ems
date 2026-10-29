@@ -8,7 +8,7 @@ export default defineEventHandler(async (event): Promise<AdminSession> => {
     throw createError({ statusCode: 503, statusMessage: '伺服器沒有設定管理密碼（NUXT_ADMIN_PASSWORD）' })
   }
   const body = await readBody<{ password?: unknown }>(event)
-  const ok = typeof body?.password === 'string' && (await login(event, body.password))
+  const ok = typeof body?.password === 'string' && (await loginWithPassword(event, body.password))
   if (!ok) throw createError({ statusCode: 401, statusMessage: '密碼錯誤' })
-  return { authenticated: true, passwordRequired: true }
+  return adminSession(event)
 })

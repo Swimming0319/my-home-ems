@@ -18,6 +18,8 @@ export default defineNuxtConfig({
     supabaseServiceKey: '',
     // 後台管理密碼；開發模式沒設定時不需要登入，正式環境沒設定則沒有人能登入，後台只剩訪客模式
     adminPassword: '',
+    // 可以用 Google 登入後台的信箱（逗號分隔）；要搭配 Supabase Auth 開啟 Google provider
+    adminEmails: '',
     public: {
       // 前後端共用同一個 Project URL；瀏覽器只拿 publishable key 訂閱 Realtime
       supabaseUrl: '',

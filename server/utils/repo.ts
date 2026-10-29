@@ -220,13 +220,27 @@ export function createSupabaseRepo(client: SupabaseClient<Database>): Repo {
 }
 
 let repo: Repo | null = null
+let serverClient: SupabaseClient<Database> | null | undefined
+
+// 伺服器端用 secret key 的 Supabase 用戶端（能繞過 RLS）；沒設定 Supabase 時回傳 null。
+// 資料存取與後台的 Google 登入（驗證 access token）共用同一個
+export function useServerSupabase(): SupabaseClient<Database> | null {
+  if (serverClient !== undefined) return serverClient
+  const config = useRuntimeConfig()
+  serverClient =
+    config.public.supabaseUrl && config.supabaseServiceKey
+      ? createClient<Database>(normalizeSupabaseUrl(config.public.supabaseUrl), config.supabaseServiceKey, {
+          auth: { persistSession: false, autoRefreshToken: false }
+        })
+      : null
+  return serverClient
+}
 
 export function useRepo(): Repo {
   if (repo) return repo
-  const config = useRuntimeConfig()
-  if (config.public.supabaseUrl && config.supabaseServiceKey) {
-    const url = normalizeSupabaseUrl(config.public.supabaseUrl)
-    repo = createSupabaseRepo(createClient<Database>(url, config.supabaseServiceKey, { auth: { persistSession: false } }))
+  const client = useServerSupabase()
+  if (client) {
+    repo = createSupabaseRepo(client)
   } else {
     console.warn('[repo] 沒有設定 Supabase，改用記憶體模式（伺服器重啟後狀態與歷史會清空）')
     repo = createMemoryRepo()
