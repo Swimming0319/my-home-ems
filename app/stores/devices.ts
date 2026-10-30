@@ -12,6 +12,7 @@ import type {
   Reading
 } from '#shared/types/smartRoom'
 import type { AlertLogEntry } from '~/utils/alertLog'
+import type { OthersEvent } from '~/utils/othersActivity'
 import type { Mission } from '#shared/utils/missions'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -35,6 +36,13 @@ const CLOCK_TICK_MS = 1_000
 const BREAKER_RETRY_MS = 3_000
 // 操作失敗的訊息顯示多久後自動消失
 const COMMAND_ERROR_MS = 6_000
+// 「有人打開了冷氣」這類提示顯示多久、最多同時幾則
+const ACTIVITY_MS = 4_500
+const ACTIVITY_MAX = 3
+// 自己送出指令（或復電）後這麼久內推播回來的事件，都當成自己做的：Realtime 可能比 API 回應先到
+const OWN_ACTION_MS = 5_000
+// 復電時每台家電各推播一筆、時間點都一樣，先收集一下再合併成一則提示
+const ACTIVITY_BATCH_MS = 300
 
 export type LiveMode = 'connecting' | 'realtime' | 'polling'
 
@@ -64,6 +72,16 @@ export const useDevicesStore = defineStore('devices', () => {
   // 全屋從什麼時候開始連續超載（前端自己觀察到的），用來顯示跳電倒數
   const overSince = ref<number | null>(null)
   let lastBreakerCheck = 0
+  // 目前有幾個分頁開著網站；沒有 Realtime（輪詢模式）時不知道，是 null
+  const onlineCount = ref<number | null>(null)
+  // 別人操作家電的提示（前台顯示）
+  const activity = ref<{ id: number; text: string }[]>([])
+  let activityId = 0
+  // 自己做的事不要提示：送出指令的時間（依家電）、API 回應的事件、送出復電的時間
+  const ownActionAt = new Map<string, number>()
+  const ownEvents = new Set<string>()
+  let ownRestoreAt = 0
+  const othersBatches = new Map<string, OthersEvent[]>()
 
   const stream = useDeviceEventStream()
   let timers: ReturnType<typeof setInterval>[] = []
@@ -165,6 +183,44 @@ export const useDevicesStore = defineStore('devices', () => {
     scheduleHistoryRefresh(event.device_id)
   }
 
+  // ---- 別人的操作 ----
+  // 只看 Realtime 推播進來的事件；重新連線時的補抓（loadAll）不會經過這裡，不會一次跳一堆舊提示
+  function onRealtimeEvent(event: DeviceEvent) {
+    noteOthersEvent(event)
+    applyEvent(event)
+  }
+
+  function noteOthersEvent(event: DeviceEvent) {
+    if (event.source !== 'player' && event.source !== 'admin') return
+    const device = devices.value.find((d) => d.id === event.device_id)
+    if (!device) return
+    if (ownEvents.has(`${event.device_id}|${event.timestamp}`)) return
+    if (Date.now() - (ownActionAt.get(event.device_id) ?? 0) < OWN_ACTION_MS) return
+    let batch = othersBatches.get(event.timestamp)
+    if (!batch) {
+      batch = []
+      othersBatches.set(event.timestamp, batch)
+      setTimeout(() => flushOthersBatch(event.timestamp), ACTIVITY_BATCH_MS)
+    }
+    // 要在 applyEvent 之前記下「之前的狀態」，才知道是打開還是關掉
+    batch.push({ device, previous: latestEvents.value[event.device_id] ?? null, event })
+  }
+
+  function flushOthersBatch(timestamp: string) {
+    const batch = othersBatches.get(timestamp) ?? []
+    othersBatches.delete(timestamp)
+    // 好幾台一起來的是復電；自己剛扳的電箱就不提示
+    if (batch.length > 1 && Date.now() - ownRestoreAt < OWN_ACTION_MS) return
+    const text = describeOthersBatch(batch)
+    if (text) pushActivity(text)
+  }
+
+  function pushActivity(text: string) {
+    const id = ++activityId
+    activity.value = [...activity.value.slice(-(ACTIVITY_MAX - 1)), { id, text }]
+    setTimeout(() => (activity.value = activity.value.filter((item) => item.id !== id)), ACTIVITY_MS)
+  }
+
   function setPolling(enabled: boolean) {
     if (pollTimer) clearInterval(pollTimer)
     pollTimer = enabled ? setInterval(loadAll, POLL_INTERVAL_MS) : null
@@ -179,12 +235,16 @@ export const useDevicesStore = defineStore('devices', () => {
     await loadAll()
 
     const stop = await stream.subscribe({
-      onEvent: applyEvent,
+      onEvent: onRealtimeEvent,
       onThreshold: applyThreshold,
       onSettings: applySettings,
+      onPresence: (count) => {
+        if (myGeneration === generation) onlineCount.value = count
+      },
       onStatus: (connected) => {
         if (myGeneration !== generation) return
         liveMode.value = connected ? 'realtime' : 'polling'
+        if (!connected) onlineCount.value = null
         setPolling(!connected)
         // 剛連上（或重新連上）時，補抓斷線期間可能錯過的事件
         if (connected) loadAll()
@@ -315,6 +375,7 @@ export const useDevicesStore = defineStore('devices', () => {
   // 復電（前台玩家在電箱、後台遠端）。事件與設定會透過 Realtime 推播回來；輪詢模式就馬上重抓
   async function resetBreaker(source: 'player' | 'admin') {
     resetting.value = true
+    ownRestoreAt = Date.now()
     commandError.value = null
     try {
       const result = await $fetch<BreakerResetResult>('/api/breaker/reset', { method: 'POST', body: { source } })
@@ -341,8 +402,10 @@ export const useDevicesStore = defineStore('devices', () => {
   async function sendCommand(deviceId: string, command: DeviceCommand) {
     pendingDeviceId.value = deviceId
     commandError.value = null
+    ownActionAt.set(deviceId, Date.now())
     try {
       const result = await $fetch<CommandResult>(`/api/devices/${deviceId}/commands`, { method: 'POST', body: command })
+      if (result.event) ownEvents.add(`${result.event.device_id}|${result.event.timestamp}`)
       // 操作的是「現在」，正在倒帶的話跳回即時，才看得到操作的結果
       playhead.value = null
       now.value = Date.now()
@@ -387,6 +450,8 @@ export const useDevicesStore = defineStore('devices', () => {
     alertLog,
     breakerCountdown,
     autoRestoreIn,
+    onlineCount,
+    activity,
     powerOut,
     energy,
     missions,

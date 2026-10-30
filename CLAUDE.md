@@ -37,7 +37,7 @@ npm run build
 - 規劃文件已改為 v2（前台角色＋後台監控），建置進度以規劃文件為準
 - 頁面：`/` 前台（角色操控）、`/admin` 後台。兩頁共用 `app/stores/devices.ts`，進頁面呼叫 `startLive()`、離開呼叫 `stopLive()`
 - 後台版面（`pages/admin/index.vue`）：`lg` 以上整頁固定 `h-dvh`、不捲動（左：3D 房間＋圖表；右：精簡家電卡＋警示紀錄，紀錄只在框內捲動），用電設定收在 ⚙ 打開的原生 `<dialog>` 側邊抽屜。新增後台區塊時要確認 1366×768 仍然放得下；窄螢幕維持上下捲動
-- 即時同步：`useDeviceEventStream` 用 publishable key 訂閱 `device_events` 的 INSERT（Supabase Realtime postgres_changes）；沒設定 key 或斷線時 store 自動退回每 10 秒輪詢，重新連上時補抓一次全部資料
+- 即時同步：`useDeviceEventStream` 用 publishable key 訂閱 `device_events` 的 INSERT（Supabase Realtime postgres_changes）；沒設定 key 或斷線時 store 自動退回每 10 秒輪詢，重新連上時補抓一次全部資料。同一個頻道也用 Presence 報到（每個分頁一個隨機 key），store 的 `onlineCount` 是目前開著網站的分頁數（前台、後台、本機開發連同一個 Supabase 都算），輪詢模式時是 null、不顯示。Realtime 推播的事件會先經過 `noteOthersEvent`：不是自己送出的（看 `ownEvents`／`ownActionAt`／`ownRestoreAt`，Realtime 可能比 API 回應先到，送出後 5 秒內的都算自己的）就用 `app/utils/othersActivity.ts` 描述成一句話，前台用 `ActivityToasts` 顯示幾秒；同一個時間點的多筆事件是復電，合併成一則。只有 Realtime 推播會觸發，`loadAll` 補抓不會
 - 警示紀錄由 `app/utils/alertLog.ts` 從 24 小時歷史讀數推算，不存表
 - **跳電是延遲結算的**（`server/utils/breaker.ts` 的 `advanceBreaker`）：送指令、`/api/events/latest`、`/api/breaker/check`、改契約容量之前都會先結算，把斷電事件補寫在精確的時間點。純計算在 `shared/utils/breaker.ts`。新增會改變狀態的 API 時，記得先呼叫 `advanceBreaker`，指令才會套用在跳電後的正確狀態上
 - 前端的跳電倒數只是顯示用（store 自己觀察超載開始的時間），真正的跳電時間以伺服器為準

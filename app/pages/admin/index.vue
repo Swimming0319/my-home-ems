@@ -90,6 +90,9 @@ function onDialogClick(e: MouseEvent) {
       </div>
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <LiveStatus :live-mode="store.liveMode" :playhead="store.playhead" />
+        <ClientOnly>
+          <OnlineCount v-if="store.onlineCount" class="text-muted" :count="store.onlineCount" />
+        </ClientOnly>
         <span>
           全屋用電
           <strong class="text-xl tabular-nums" :class="HOUSE_LEVEL_TEXT[store.houseLevel]">{{ store.totalWatts.toLocaleString() }}</strong>

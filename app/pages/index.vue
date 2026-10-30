@@ -207,7 +207,12 @@ onBeforeUnmount(() => {
             </p>
             <p class="mt-0.5 text-xs text-muted">{{ cycle.icon }} {{ cycle.label }}</p>
           </ClientOnly>
-          <LiveStatus class="mt-1 text-xs" :live-mode="store.liveMode" :playhead="null" />
+          <p class="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
+            <LiveStatus :live-mode="store.liveMode" :playhead="null" />
+            <ClientOnly>
+              <OnlineCount v-if="store.onlineCount" class="text-muted" :count="store.onlineCount" />
+            </ClientOnly>
+          </p>
         </div>
         <div class="pointer-events-auto flex shrink-0 items-center gap-2">
           <!-- 手機上內距收窄，讓出空間給左邊的用電數字 -->
@@ -235,12 +240,19 @@ onBeforeUnmount(() => {
         >
           <GuideCard inline :steps="guideSteps" :collapse-key="sceneTaps" @close="tour.stop()" />
         </div>
-        <div
-          v-else
-          class="pointer-events-auto max-w-full self-start rounded-xl border border-white/10 bg-surface/90 px-3 py-2 shadow-lg shadow-black/30 backdrop-blur md:hidden"
-        >
-          <MissionList class="max-w-64" inline :missions="store.missions" :collapse-key="sceneTaps" />
+        <div v-else class="flex flex-wrap items-start gap-2 md:hidden">
+          <div class="pointer-events-auto max-w-full rounded-xl border border-white/10 bg-surface/90 px-3 py-2 shadow-lg shadow-black/30 backdrop-blur">
+            <MissionList class="max-w-64" inline :missions="store.missions" :collapse-key="sceneTaps" />
+          </div>
+          <!-- 手機版頂部那一行放不下人數，放在今日任務旁邊 -->
+          <OnlineCount
+            v-if="store.onlineCount"
+            class="rounded-full border border-white/10 bg-surface/90 px-3 py-1.5 text-xs text-muted shadow-lg shadow-black/30 backdrop-blur"
+            :count="store.onlineCount"
+          />
         </div>
+        <!-- 別人操作家電的提示：放在頂部資訊下面、畫面正中間，不跟底部的操作按鈕、遙控面板搶位置 -->
+        <ActivityToasts class="self-center" :items="store.activity" />
       </ClientOnly>
     </header>
 

@@ -25,6 +25,8 @@ export interface DeviceStreamHandlers {
   // 後台改了契約容量
   onSettings: (settings: HouseSettings) => void
   onStatus: (connected: boolean) => void
+  // 目前有幾個分頁開著網站（前台、後台都算，包含自己）
+  onPresence: (count: number) => void
 }
 
 // 訂閱房間的所有即時變化。沒有設定 publishable key（例如記憶體模式）時回傳 null，
@@ -40,8 +42,13 @@ export function useDeviceEventStream() {
       auth: { persistSession: false, autoRefreshToken: false }
     })
 
-    const channel = client
-      .channel('smart-room')
+    // Presence：每個分頁用隨機的 key 報到，只同步「我在線上」，不寫資料庫、不同步角色位置。
+    // 分頁關掉或斷線時，Supabase 會自動把它移出名單
+    // crypto.randomUUID 只有 https／localhost 能用，手機用區網 IP 連開發伺服器時要退回亂數字串
+    const key = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const channel = client.channel('smart-room', { config: { presence: { key } } })
+    channel
+      .on('presence', { event: 'sync' }, () => handlers.onPresence(Object.keys(channel.presenceState()).length))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'device_events' }, (payload) => {
         handlers.onEvent(normalizeEvent(payload.new))
       })
@@ -57,7 +64,10 @@ export function useDeviceEventStream() {
           tripped_at: tripped ? new Date(tripped).toISOString() : null
         })
       })
-      .subscribe((status) => handlers.onStatus(status === 'SUBSCRIBED'))
+      .subscribe((status) => {
+        handlers.onStatus(status === 'SUBSCRIBED')
+        if (status === 'SUBSCRIBED') channel.track({ online_at: new Date().toISOString() })
+      })
 
     return () => {
       client?.removeChannel(channel)
