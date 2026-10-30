@@ -18,6 +18,25 @@ function normalizeEvent(row: Record<string, unknown>): DeviceEvent {
   }
 }
 
+const VISITOR_KEY = 'yongdian-xiaowu:visitor-id'
+
+// 這個瀏覽器的訪客 id，存在 localStorage 讓所有分頁共用。讀寫失敗（無痕模式封鎖儲存空間）時
+// 退回只用一次的 id，頂多同一個人被多算幾次。
+// crypto.randomUUID 只有 https／localhost 能用，手機用區網 IP 連開發伺服器時要退回亂數字串
+function visitorId(): string {
+  const fresh = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  try {
+    let id = localStorage.getItem(VISITOR_KEY)
+    if (!id) {
+      id = fresh()
+      localStorage.setItem(VISITOR_KEY, id)
+    }
+    return id
+  } catch {
+    return fresh()
+  }
+}
+
 export interface DeviceStreamHandlers {
   onEvent: (event: DeviceEvent) => void
   // 後台改了某台電器的閾值
@@ -42,11 +61,10 @@ export function useDeviceEventStream() {
       auth: { persistSession: false, autoRefreshToken: false }
     })
 
-    // Presence：每個分頁用隨機的 key 報到，只同步「我在線上」，不寫資料庫、不同步角色位置。
-    // 分頁關掉或斷線時，Supabase 會自動把它移出名單
-    // crypto.randomUUID 只有 https／localhost 能用，手機用區網 IP 連開發伺服器時要退回亂數字串
-    const key = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    const channel = client.channel('smart-room', { config: { presence: { key } } })
+    // Presence：只同步「我在線上」，不寫資料庫、不同步角色位置。分頁關掉或斷線時，Supabase 會自動移出名單。
+    // 用同一個瀏覽器的訪客 id 報到：Presence 會把同一個 key 的多條連線合併成一筆，
+    // 同時開前台與後台、或開好幾個分頁都只算一人（電腦加手機還是兩人，沒登入分不出來）
+    const channel = client.channel('smart-room', { config: { presence: { key: visitorId() } } })
     channel
       .on('presence', { event: 'sync' }, () => handlers.onPresence(Object.keys(channel.presenceState()).length))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'device_events' }, (payload) => {
