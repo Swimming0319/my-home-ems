@@ -9,7 +9,16 @@ const props = defineProps<{
   countdown: number | null
   // 跳電中（停電）
   powerOut: boolean
+  // 停電中距離自動復電還有幾秒；null 代表沒有停電
+  autoRestoreIn?: number | null
 }>()
+
+// 每秒變的倒數另外顯示、不放進 role="alert" 的文字裡，螢幕閱讀器才不會每秒重唸一次
+const autoRestoreText = computed<string | null>(() => {
+  if (!props.powerOut || props.autoRestoreIn == null) return null
+  const seconds = props.autoRestoreIn
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} 後自動復電`
+})
 
 const message = computed<{ text: string; tone: 'alert' | 'warning' } | null>(() => {
   if (props.level === 'alert') {
@@ -19,7 +28,7 @@ const message = computed<{ text: string; tone: 'alert' | 'warning' } | null>(() 
       : { text: `全屋用電超過契約容量 ${limit}W！即將跳電…`, tone: 'alert' }
   }
   // 停電時用電一定是 0，放在超載判斷之後也不會被蓋掉
-  if (props.powerOut) return { text: '⚡ 跳電了！全屋用電超過契約容量，整間停電，要到電箱把總開關扳回去', tone: 'alert' }
+  if (props.powerOut) return { text: '⚡ 跳電了！全屋用電超過契約容量，整間停電，要到電箱把總開關扳回去，或等它自動復電', tone: 'alert' }
   if (props.level === 'warning') {
     const ratio = Math.round((props.totalWatts / props.limit) * 100)
     return { text: `全屋用電已達契約容量的 ${ratio}%，再開大電器可能會跳電`, tone: 'warning' }
@@ -36,7 +45,10 @@ const message = computed<{ text: string; tone: 'alert' | 'warning' } | null>(() 
     :class="message.tone === 'alert' ? 'bg-alert/15 font-semibold text-alert' : 'bg-warning/15 text-warning'"
     :role="message.tone === 'alert' ? 'alert' : 'status'"
   >
-    <p>{{ message.text }}</p>
+    <p>
+      {{ message.text }}
+      <span v-if="autoRestoreText" class="ml-1 font-normal whitespace-nowrap tabular-nums opacity-80" aria-hidden="true">（{{ autoRestoreText }}）</span>
+    </p>
     <slot />
   </div>
 </template>

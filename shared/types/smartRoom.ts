@@ -38,7 +38,8 @@ export interface Reading {
   wash_phase: WashPhase | null
 }
 
-export type CommandSource = 'player' | 'admin' | 'system'
+// system：跳電時寫的斷電事件，代表「沒有電」；auto：停電太久，伺服器自動復電時寫的事件
+export type CommandSource = 'player' | 'admin' | 'system' | 'auto'
 
 // 每次狀態改變寫一筆；兩筆事件之間家電的狀態不變
 export interface DeviceEvent {
@@ -58,7 +59,7 @@ export type CommandAction = 'power_on' | 'power_off' | 'set_temp'
 export interface DeviceCommand {
   action: CommandAction
   set_temp_c?: number
-  source: Exclude<CommandSource, 'system'>
+  source: Exclude<CommandSource, 'system' | 'auto'>
   guided?: boolean
 }
 

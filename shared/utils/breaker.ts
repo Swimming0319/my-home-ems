@@ -5,6 +5,10 @@ import { deviceIsOn, implicitChangePoints, intrinsicChangePoints, readingFromEve
 // 留一段時間讓玩家看到倒數、有機會關掉家電。
 export const BREAKER_GRACE_MS = 10_000
 
+// 停電這麼久沒人去扳總開關，就自動復電。真實的電箱不會自己恢復，這是為了全站共用的房間：
+// 有人跳電後沒復電就離開，下一個訪客進來不會看到一間被丟著不管的暗房間
+export const OUTAGE_AUTO_RESTORE_MS = 5 * 60 * 1000
+
 function activeEvent(events: DeviceEvent[], time: number): DeviceEvent | null {
   let found: DeviceEvent | null = null
   for (const event of events) {

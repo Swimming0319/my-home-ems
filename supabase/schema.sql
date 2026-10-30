@@ -29,13 +29,19 @@ create table if not exists device_events (
   power_on boolean not null,
   set_temp_c numeric,
   started_at timestamptz,
-  source text not null check (source in ('player', 'admin', 'system')),
+  -- system：跳電的斷電事件（代表沒有電）；auto：停電太久，伺服器自動復電
+  source text not null check (source in ('player', 'admin', 'system', 'auto')),
   -- 新手導覽中送出的指令；跳電的斷電事件也會標記，代表這次跳電是導覽示範造成的（不算進每日任務）
   guided boolean not null default false
 );
 
 -- 舊環境補欄位（新手導覽）
 alter table device_events add column if not exists guided boolean not null default false;
+
+-- 舊環境更新事件來源的限制（加了自動復電的 auto）
+alter table device_events drop constraint if exists device_events_source_check;
+alter table device_events add constraint device_events_source_check
+  check (source in ('player', 'admin', 'system', 'auto'));
 
 -- 全屋設定只有一列（id 固定為 1）
 create table if not exists house_settings (

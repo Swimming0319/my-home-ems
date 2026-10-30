@@ -258,6 +258,7 @@ onBeforeUnmount(() => {
         :limit="store.houseLimit"
         :countdown="store.breakerCountdown"
         :power-out="store.powerOut"
+        :auto-restore-in="store.autoRestoreIn"
       />
       <p v-if="store.commandError" class="rounded-lg bg-alert/15 px-3.5 py-2 text-sm text-alert backdrop-blur" role="alert">
         {{ store.commandError }}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DeviceEvent } from '../types/smartRoom'
-import { BREAKER_GRACE_MS, findBreakerTrip, tripEvents, tripIsGuided } from './breaker'
+import { BREAKER_GRACE_MS, findBreakerTrip, OUTAGE_AUTO_RESTORE_MS, tripEvents, tripIsGuided } from './breaker'
 import { readingFromEvent, WASH_STEP_MS } from './powerModel'
 import { createMemoryRepo, SEED_DEVICES } from '../../server/utils/repo'
 import { advanceBreaker, restorePower } from '../../server/utils/breaker'
@@ -18,6 +18,7 @@ function on(device_id: string, at: number, extra: Partial<DeviceEvent> = {}): De
 const acCold = on('ac', t0, { set_temp_c: 20 })
 const washer = on('washer', t0)
 const heatingStarts = t0 + 2 * WASH_STEP_MS
+const tripTime = heatingStarts + BREAKER_GRACE_MS
 
 describe('tripIsGuided', () => {
   const tripAt = heatingStarts + BREAKER_GRACE_MS
@@ -79,7 +80,8 @@ describe('advanceBreaker（記憶體模式）', () => {
     await repo.insertEvent(acCold)
     await repo.insertEvent(washer)
 
-    const now = t0 + 60 * MIN
+    // 跳電後 1 分鐘才有人來檢查（還沒到自動復電）
+    const now = tripTime + MIN
     expect(await advanceBreaker(repo, now)).toBe(heatingStarts + BREAKER_GRACE_MS)
     const acState = await repo.latestEvent('ac', new Date(now))
     expect(acState).toMatchObject({ power_on: false, source: 'system', timestamp: iso(heatingStarts + BREAKER_GRACE_MS) })
@@ -102,7 +104,7 @@ describe('advanceBreaker（記憶體模式）', () => {
     await repo.insertEvent(on('light_living', t0 - MIN, { started_at: iso(t0 - MIN) }))
     await repo.insertEvent(acCold)
     await repo.insertEvent(washer)
-    const now = t0 + 60 * MIN
+    const now = tripTime + MIN
     await advanceBreaker(repo, now)
 
     expect(await restorePower(repo, now, 'player')).toBe(true)
@@ -117,6 +119,37 @@ describe('advanceBreaker（記憶體模式）', () => {
 
     // 已經有電時再按一次不會多寫事件
     expect(await restorePower(repo, now + MIN, 'player')).toBe(false)
+  })
+
+  it('停電 5 分鐘沒人復電：自動復電補在跳電後 5 分鐘的時間點，不算一次新的跳電', async () => {
+    const repo = createMemoryRepo()
+    await repo.insertEvent(on('light_living', t0 - MIN, { started_at: iso(t0 - MIN) }))
+    await repo.insertEvent(acCold)
+    await repo.insertEvent(washer)
+    const restoreAt = tripTime + OUTAGE_AUTO_RESTORE_MS
+    await advanceBreaker(repo, tripTime + MIN)
+
+    // 還差 1 毫秒：繼續停電
+    await advanceBreaker(repo, restoreAt - 1)
+    expect((await repo.getSettings()).tripped_at).toBe(iso(tripTime))
+
+    // 過了很久才有人打開頁面：復電事件補寫在精確的時間點，不是「現在」
+    const later = restoreAt + 30 * MIN
+    await advanceBreaker(repo, later)
+    const settings = await repo.getSettings()
+    expect(settings.tripped_at).toBeNull()
+    expect(settings.breaker_settled_at).toBe(iso(restoreAt))
+    const state = async (id: string) => repo.latestEvent(id, new Date(later))
+    expect(await state('fridge')).toMatchObject({ power_on: true, source: 'auto', timestamp: iso(restoreAt) })
+    expect(await state('light_living')).toMatchObject({ power_on: true, source: 'auto' })
+    expect(await state('ac')).toMatchObject({ power_on: false, source: 'auto', set_temp_c: 20 })
+    // 沒開的家電回到待機（不是 system 事件的「沒有電」），也不會被算成一次跳電
+    const microwave = devices.find((d) => d.id === 'microwave')!
+    expect(readingFromEvent(microwave, await state('microwave'), later)).toMatchObject({ status: 'standby', power_watts: 2 })
+    expect(await repo.listTrips(new Date(t0), new Date(later))).toHaveLength(1)
+
+    // 已經自動復電了，玩家再去扳電箱不會多寫事件
+    expect(await restorePower(repo, later, 'player')).toBe(false)
   })
 
   it('改契約容量後，新的容量不會追溯套用到改之前的時段', async () => {

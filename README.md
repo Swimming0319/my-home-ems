@@ -98,7 +98,7 @@ npm run typecheck  # 型別檢查（vue-tsc）；push 到 main 時 GitHub Action
 | POST | `/api/devices/:id/commands` | 操作家電，每個 IP 每分鐘最多 30 次；`source: "admin"` 需要登入；新手導覽中帶 `guided: true` |
 | PATCH | `/api/devices/:id` | 改閾值 `{ power_threshold_watts }`（需要登入） |
 | GET／PATCH | `/api/settings` | 讀取契約容量與停電狀態 `{ house_limit_watts, tripped_at }`；PATCH 修改契約容量（需要登入） |
-| POST | `/api/breaker/check` | 結算跳電，回傳 `{ tripped_at }`；公開、可重複呼叫 |
+| POST | `/api/breaker/check` | 結算跳電與停電 5 分鐘的自動復電，回傳 `{ tripped_at }`；公開、可重複呼叫 |
 | GET | `/api/breaker/trips` | 過去 24 小時的每次跳電（`{ at, guided }` 陣列；`guided` 是新手導覽示範造成的，不算進每日任務） |
 | POST | `/api/breaker/reset` | 復電 `{ source: 'player' \| 'admin' }`，回傳 `{ restored }`；admin 需要登入 |
 | GET／POST | `/api/admin/session`、`/api/admin/login`、`/api/admin/logout` | 後台登入狀態、密碼登入、登出（每個 IP 每分鐘最多試 5 次） |

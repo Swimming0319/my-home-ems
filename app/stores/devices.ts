@@ -285,11 +285,11 @@ export const useDevicesStore = defineStore('devices', () => {
     overSince.value === null ? null : Math.max(0, Math.ceil((overSince.value + BREAKER_GRACE_MS - now.value) / 1000))
   )
 
+  // 跳電、自動復電都由伺服器結算；有 Realtime 的話新事件會自己推播過來，輪詢模式就馬上重抓，不用等下一輪
   async function checkBreaker() {
     try {
-      const result = await $fetch<BreakerCheckResult>('/api/breaker/check', { method: 'POST' })
-      // 有 Realtime 的話斷電事件會自己推播過來；輪詢模式就馬上重抓，不用等下一輪
-      if (result.tripped_at && liveMode.value !== 'realtime') await loadAll()
+      await $fetch<BreakerCheckResult>('/api/breaker/check', { method: 'POST' })
+      if (liveMode.value !== 'realtime') await loadAll()
     } catch (err) {
       console.error('[devices] 跳電結算失敗', err)
     }
@@ -297,6 +297,20 @@ export const useDevicesStore = defineStore('devices', () => {
 
   // 停電中：只看「現在」；倒帶時看的是歷史，不顯示停電狀態
   const powerOut = computed<boolean>(() => playhead.value === null && trippedAt.value !== null)
+
+  // 停電太久會自動復電：剩幾秒（給畫面顯示），時間到了請伺服器結算一次。
+  // 沒有人操作家電的話伺服器不會主動結算，所以由開著頁面的人觸發，跟跳電倒數同一個做法
+  const autoRestoreIn = computed<number | null>(() =>
+    !powerOut.value || !trippedAt.value
+      ? null
+      : Math.max(0, Math.ceil((Date.parse(trippedAt.value) + OUTAGE_AUTO_RESTORE_MS - now.value) / 1000))
+  )
+  watch(autoRestoreIn, (seconds) => {
+    if (seconds === 0 && now.value - lastBreakerCheck >= BREAKER_RETRY_MS) {
+      lastBreakerCheck = now.value
+      checkBreaker()
+    }
+  })
 
   // 復電（前台玩家在電箱、後台遠端）。事件與設定會透過 Realtime 推播回來；輪詢模式就馬上重抓
   async function resetBreaker(source: 'player' | 'admin') {
@@ -372,6 +386,7 @@ export const useDevicesStore = defineStore('devices', () => {
     houseLimit,
     alertLog,
     breakerCountdown,
+    autoRestoreIn,
     powerOut,
     energy,
     missions,

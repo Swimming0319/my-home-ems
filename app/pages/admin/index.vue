@@ -116,6 +116,7 @@ function onDialogClick(e: MouseEvent) {
         :limit="store.houseLimit"
         :countdown="store.breakerCountdown"
         :power-out="store.powerOut"
+        :auto-restore-in="store.autoRestoreIn"
       >
         <button
           v-if="store.powerOut && canControl"

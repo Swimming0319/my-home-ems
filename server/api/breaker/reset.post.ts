@@ -1,4 +1,4 @@
-import type { BreakerResetResult, CommandSource } from '#shared/types/smartRoom'
+import type { BreakerResetResult } from '#shared/types/smartRoom'
 
 // POST /api/breaker/reset  { source: 'player' | 'admin' }
 // 復電：前台玩家走到電箱扳回總開關，或後台遠端復電（需要登入）
@@ -12,6 +12,6 @@ export default defineEventHandler(async (event): Promise<BreakerResetResult> => 
     throw createError({ statusCode: 400, statusMessage: 'source 必須是 player / admin' })
   }
   if (source === 'admin') await requireAdmin(event)
-  const restored = await restorePower(useRepo(), Date.now(), source as CommandSource)
+  const restored = await restorePower(useRepo(), Date.now(), source)
   return { restored }
 })
